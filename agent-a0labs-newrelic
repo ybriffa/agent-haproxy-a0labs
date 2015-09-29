@@ -1,0 +1,306 @@
+#!/usr/bin/python
+##
+## agent-a0labs-haproxy
+##
+## Made by Yannick Briffa
+## Email yannick@a0labs.com
+##       yann.briffa@gmail.com
+##
+
+
+import httplib, urllib, csv, urllib2, socket, os, time, json, datetime, requests, ConfigParser
+
+def	my_int(sth):
+	if (sth == None or sth.isdigit() == False):
+		return 0
+	return int(sth)
+
+class LogsType:
+	ERROR = "ERR"
+	WARNING = "WRG"
+
+def singleton(cls):
+	instance=cls()
+	cls.__new__ = cls.__call__= lambda cls: instance
+	cls.__init__ = lambda self: None
+	return instance
+
+@singleton
+class Config():
+	def get(self, section, item):
+		return self.cp.get(section, item)
+	
+	def getInt(self, section, item):
+		return self.cp.getint(section, item)
+
+	def getBoolean(self, section, item):
+		return self.cp.getboolean(section, item)
+
+	def __init__(self):
+		self.cp = ConfigParser.RawConfigParser()
+		self.cp.read('/etc/newrelic/agent-a0labs.cfg')
+
+class Agent:
+	def update_postdata(self):
+		self.post_data['components'] = []
+		for component in self.components:
+			self.post_data['components'].append(self.components[component])
+
+	def log(self, errtype, message):
+		self.logs_file.write("[" + errtype + "]" + ' ' + str(datetime.datetime.now()) + ' : ' + message +'\n')
+
+	def populateMetrics(self, metrics, value_type, scale, value):
+		label = "Component/" + value_type + "[" + scale + "]"
+		if (value == 'Y'):
+			value = 1
+		if (value == None or value == ''):
+			value = 0
+		if label in metrics:
+			yet = metrics[label]
+			if type(yet) is dict:
+				yet['min'] = (yet['min'] < value and yet['min'] or value)
+				yet['max'] = (yet['max'] > value and yet['max'] or value)
+				yet['total'] += value
+				yet['count'] += 1
+				yet['sum_of_squares'] += (value * value)
+				metrics[label] = yet
+			else:
+				metrics[label] = {}
+				metrics[label]['min'] = (yet < value and yet or value)
+				metrics[label]['max'] = (yet > value and yet or value)
+				metrics[label]['total'] = yet + value
+				metrics[label]['count'] = 2
+				metrics[label]['sum_of_squares'] = (yet * yet + value * value)
+		else:
+			metrics[label] = value
+
+	def populateDeltaMetrics(self, name, metrics, value_type, scale, value):
+		label = "Component/" + value_type + "[" + scale + "]"
+		if (name not in self.old):
+			self.old[name] = {}
+		if (value == None or value == ''):
+			value = 0
+		delta = 0
+		if label in self.old[name]:
+			delta = value - self.old[name][label]
+		self.old[name][label] = value
+		self.populateMetrics(metrics, value_type, scale, delta)
+	
+	def get_csv(self):
+		response = requests.get(Config().get('Haproxy', 'csv_url'), auth=(Config().get('Haproxy', 'username'), Config().get('Haproxy', 'password')))
+		if (response.status_code != 200):
+			raise Exception('impossible to get CSV')
+		page = response.content
+		cr = csv.DictReader(page.splitlines())
+		return cr
+
+	def post_datas(self):
+		post_json = json.dumps(self.post_data, indent=4)
+		headers = {"Content-Type": "application/json",
+					"Accept": "application/json","X-License-Key": self.newrelic_license}
+
+		conn = httplib.HTTPSConnection(self.platform_api_ip, timeout=5)
+		conn.request("POST", self.platform_api_url, post_json, headers)
+		response = conn.getresponse()
+		return (response.status)
+
+	def reformat_add_numeric_value(self, row, label, value):
+		if (not str(value).isdigit()):
+			value = 0
+		else:
+			value = int(value)
+		if (label not in row):
+			row[label] = value
+		else:
+			row[label] += value	
+
+	def reformat_average_numeric_value(self, row, label, value):
+		if (not str(value).isdigit()):
+			value = 0
+		else:
+			value = int(value)
+		cnt_label = label + '_cnt'
+		if (label not in row):
+			row[label] = value
+			row[cnt_label] = 1
+		else:
+			row[label] = ((row[label] * row[cnt_label]) + value) / (row[cnt_label] + 1)
+			row[cnt_label] += 1
+	
+	def reformat_csv(self, csv):
+		ret = {}
+		for row in csv:
+			if (row['# pxname'] not in ret):
+				tmp = {}
+				tmp['svname'] = row['# pxname']
+			else:
+				tmp = ret[row['# pxname']]
+			if (row['svname'] == 'FRONTEND' or row['svname'] == 'BACKEND'):
+				self.reformat_add_numeric_value(tmp, 'back_requests', row['stot'])
+				self.reformat_add_numeric_value(tmp, 'back_err_requests', row['ereq'])
+				self.reformat_add_numeric_value(tmp, 'back_err_connection', row['econ'])
+				self.reformat_add_numeric_value(tmp, 'back_err_rsp', row['eresp'])
+				
+				self.reformat_add_numeric_value(tmp, 'back_bytes_in', row['bin'])
+				self.reformat_add_numeric_value(tmp, 'back_bytes_out', row['bout'])
+
+				self.reformat_add_numeric_value(tmp, 'back_session_active', row['scur'])
+				self.reformat_add_numeric_value(tmp, 'back_session_queued', row['qcur'])
+
+				self.reformat_add_numeric_value(tmp, 'back_rsp_4xx', row['hrsp_4xx'])
+				self.reformat_add_numeric_value(tmp, 'back_rsp_5xx', row['hrsp_5xx'])
+
+				self.reformat_average_numeric_value(tmp, 'back_cx_time', row['ctime'])
+				self.reformat_average_numeric_value(tmp, 'back_rsp_time', row['rtime'])
+
+			else:
+				self.reformat_add_numeric_value(tmp, 'front_requests', row['stot'])
+				self.reformat_add_numeric_value(tmp, 'front_err_requests', row['ereq'])
+				self.reformat_add_numeric_value(tmp, 'front_err_connection', row['econ'])
+				self.reformat_add_numeric_value(tmp, 'front_err_rsp', row['eresp'])
+				
+				self.reformat_add_numeric_value(tmp, 'front_bytes_in', row['bin'])
+				self.reformat_add_numeric_value(tmp, 'front_bytes_out', row['bout'])
+
+				self.reformat_add_numeric_value(tmp, 'front_session_active', row['scur'])
+				self.reformat_add_numeric_value(tmp, 'front_session_queued', row['qcur'])
+
+				self.reformat_add_numeric_value(tmp, 'front_rsp_4xx', row['hrsp_4xx'])
+				self.reformat_add_numeric_value(tmp, 'front_rsp_5xx', row['hrsp_5xx'])
+
+				self.reformat_average_numeric_value(tmp, 'front_cx_time', row['ctime'])
+				self.reformat_average_numeric_value(tmp, 'front_rsp_time', row['rtime'])
+
+				self.reformat_add_numeric_value(tmp, 'front_srv_up', row['act'])
+				self.reformat_add_numeric_value(tmp, 'front_srv_count', 1)
+
+			ret[row['# pxname']] = tmp
+		return ret
+
+	def get_component_from_csv(self, csv):
+		duration = int(time.time() - self.last_poll_time)
+		for key in csv:
+			row = csv[key]
+			if (row['svname'] not in self.components):
+				tmp_component = {}
+				tmp_component['name'] = row['svname']
+				tmp_component['guid'] = self.guid
+				tmp_component['duration'] = duration
+				self.components[row['svname']] = tmp_component
+				metrics = {}
+			else:
+				metrics = self.components[row['svname']]['metrics']
+			self.components[row['svname']]['duration'] = duration
+
+			## Front
+			self.populateDeltaMetrics(row['svname'], metrics, "Front/Requests", 'Requests', row['front_requests'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Front/Errors/Request", "Errors", row['front_err_requests'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Front/Errors/Connection", "Errors", row['front_err_connection'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Front/Errors/Response", "Errors", row['front_err_rsp'])
+
+			self.populateDeltaMetrics(row['svname'], metrics, "Front/Bytes/Received", "Bytes", row['front_bytes_in'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Front/Bytes/Sent", "Bytes", row['front_bytes_out'])
+			
+			self.populateMetrics(metrics, "Front/Sessions/Active", "Sessions", row['front_session_active'])
+			self.populateMetrics(metrics, "Front/Sessions/Queued", "Sessions", row['front_session_queued'])
+
+			self.populateDeltaMetrics(row['svname'], metrics, "Front/Responses/4xx", "Responses", row['front_rsp_4xx'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Front/Responses/5xx", "Responses", row['front_rsp_5xx'])
+			self.populateMetrics(metrics, "Front/Responses/ConnectionTime", "MS", row['front_cx_time'])
+			self.populateMetrics(metrics, "Front/Responses/ResponseTime", "MS", row['front_rsp_time'])
+			
+			self.populateMetrics(metrics, "Front/Servers/Active", "Servers", row['front_srv_up'])
+			self.populateMetrics(metrics, "Front/Servers/Count", "Servers", row['front_srv_count'])
+			self.populateMetrics(metrics, "Front/Servers/Active_per", "Percentage", row['front_srv_up'] * 100 / row['front_srv_count'])
+
+			## Back
+			self.populateDeltaMetrics(row['svname'], metrics, "Back/Requests", 'Requests', row['back_requests'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Back/Errors/Request", "Errors", row['back_err_requests'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Back/Errors/Connection", "Errors", row['back_err_connection'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Back/Errors/Response", "Errors", row['back_err_rsp'])
+
+			self.populateDeltaMetrics(row['svname'], metrics, "Back/Bytes/Received", "Bytes", row['back_bytes_in'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Back/Bytes/Sent", "Bytes", row['back_bytes_out'])
+			
+			self.populateMetrics(metrics, "Back/Sessions/Active", "Sessions", row['back_session_active'])
+			self.populateMetrics(metrics, "Back/Sessions/Queued", "Sessions", row['back_session_queued'])
+
+			self.populateDeltaMetrics(row['svname'], metrics, "Back/Responses/4xx", "Responses", row['back_rsp_4xx'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Back/Responses/5xx", "Responses", row['back_rsp_5xx'])
+			self.populateMetrics(metrics, "Back/Responses/ConnectionTime", "MS", row['back_cx_time'])
+			self.populateMetrics(metrics, "Back/Responses/ResponseTime", "MS", row['back_rsp_time'])
+
+			self.components[row['svname']]['metrics'] = metrics			
+
+	def run(self):
+		run = True
+		code = 200
+		while (run):
+			try:
+				csv = self.get_csv()
+				reformat = self.reformat_csv(csv)
+				self.get_component_from_csv(reformat)
+				self.update_postdata()
+				code = self.post_datas()
+				if (code == 200):
+					# Clearing component cash
+					self.components = {}
+					self.last_poll_time = time.time()
+				elif (code == 400):
+					self.log(LogsType.ERROR, " 400 error encontered, request uncorrect")
+					run = False
+				elif (code == 403):
+					self.log(LogsType.ERROR, " 403 acces forbidden, checkout your license key")
+					run = False
+				elif (code == 404):
+					self.log(LogsType.ERROR, " 404 bad URL - checkout with developper of this application")
+					run = False
+				elif (code == 415):
+					self.log(LogsType.ERROR, " 415 request incorrect")
+					run = False
+			except Exception as e:
+				self.log(LogsType.ERROR, str(e))
+				code = "THROWN"
+			print ("Operation get code : " + str(code))
+			if (run):
+				print ("Now waiting for " + str(self.poll_cycle)) + " until next operation done"
+				time.sleep( int(self.poll_cycle))
+				
+	def __init__(self):
+		# Init NewRelic Variables
+		self.platform_api_uri = Config().get('NewRelicAPI', 'uri')
+		self.platform_api_url = Config().get('NewRelicAPI', 'url')
+		self.platform_api_ip = Config().get('NewRelicAPI', 'ip')
+		self.newrelic_license = Config().get('NewRelicAPI', 'license_key')
+		self.poll_cycle = Config().getInt('NewRelicAPI', 'poll_cycle')
+
+		# Init of agent informations
+		self.guid = Config().get('Agent', 'guid')
+		self.agent_host = socket.gethostname()
+		self.agent_pid = os.getpid()
+		self.version = Config().get('Agent', 'version')
+		self.agent_hash = {'host' : self.agent_host, 'pid' : self.agent_pid, 'version' : str(self.version)}
+
+		# Init old dict for delta computing values
+		self.old = {}
+		
+		# Init time of program start
+		self.last_poll_time = time.time() - float(self.poll_cycle)
+
+		# Init of component
+		self.components = {}
+
+		# Init post_datas
+		self.post_data = {'agent': self.agent_hash, 'components':[]}
+
+		# Init Logs
+		self.logs_enabled = Config().getBoolean('Logs', 'enable')
+		if (self.logs_enabled):
+			self.logs_file = open(Config().get('Logs', 'file'), 'a')
+			if (self.logs_file == None):
+				sys.stderr.write('Impossible to open log_file, no logs saved')
+				self.logs_enabled  = False
+
+if __name__ == '__main__':
+	p = Agent()
+	p.run()
