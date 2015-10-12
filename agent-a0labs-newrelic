@@ -1,14 +1,6 @@
 #!/usr/bin/python
-##
-## agent-a0labs-haproxy
-##
-## Made by Yannick Briffa
-## Email yannick@a0labs.com
-##       yann.briffa@gmail.com
-##
 
-
-import httplib, urllib, csv, urllib2, socket, os, time, json, datetime, requests, ConfigParser
+import httplib, urllib, csv, urllib2, socket, os, time, json, datetime, requests, ConfigParser, sys, traceback
 
 def	my_int(sth):
 	if (sth == None or sth.isdigit() == False):
@@ -96,6 +88,7 @@ class Agent:
 
 	def post_datas(self):
 		post_json = json.dumps(self.post_data, indent=4)
+		print post_json
 		headers = {"Content-Type": "application/json",
 					"Accept": "application/json","X-License-Key": self.newrelic_license}
 
@@ -133,48 +126,46 @@ class Agent:
 			if (row['# pxname'] not in ret):
 				tmp = {}
 				tmp['svname'] = row['# pxname']
+				tmp['servers'] = {}
 			else:
 				tmp = ret[row['# pxname']]
-			if (row['svname'] == 'FRONTEND' or row['svname'] == 'BACKEND'):
-				self.reformat_add_numeric_value(tmp, 'back_requests', row['stot'])
+			svname = row['svname']
+			if (svname == 'FRONTEND'):
+				self.reformat_add_numeric_value(tmp, 'front_connection', row['stot'])
+				self.reformat_add_numeric_value(tmp, 'front_connection_limit', row['slim'])
+			elif (svname == 'BACKEND') :
+				self.reformat_add_numeric_value(tmp, 'back_sessions', row['stot'])
+				httpreq = my_int(row['hrsp_1xx']) + my_int(row['hrsp_2xx']) + my_int(row['hrsp_3xx']) + my_int(row['hrsp_4xx']) + my_int(row['hrsp_5xx']) + my_int(row['hrsp_other'])
+				self.reformat_add_numeric_value(tmp, 'back_requests', httpreq)
+				
 				self.reformat_add_numeric_value(tmp, 'back_err_requests', row['ereq'])
 				self.reformat_add_numeric_value(tmp, 'back_err_connection', row['econ'])
 				self.reformat_add_numeric_value(tmp, 'back_err_rsp', row['eresp'])
+
+				self.reformat_add_numeric_value(tmp, 'back_rsp_3xx', row['hrsp_3xx'])
+				self.reformat_add_numeric_value(tmp, 'back_rsp_4xx', row['hrsp_4xx'])
+				self.reformat_add_numeric_value(tmp, 'back_rsp_5xx', row['hrsp_5xx'])
 				
 				self.reformat_add_numeric_value(tmp, 'back_bytes_in', row['bin'])
 				self.reformat_add_numeric_value(tmp, 'back_bytes_out', row['bout'])
 
-				self.reformat_add_numeric_value(tmp, 'back_session_active', row['scur'])
-				self.reformat_add_numeric_value(tmp, 'back_session_queued', row['qcur'])
-
-				self.reformat_add_numeric_value(tmp, 'back_rsp_4xx', row['hrsp_4xx'])
-				self.reformat_add_numeric_value(tmp, 'back_rsp_5xx', row['hrsp_5xx'])
-
 				self.reformat_average_numeric_value(tmp, 'back_cx_time', row['ctime'])
 				self.reformat_average_numeric_value(tmp, 'back_rsp_time', row['rtime'])
 
+				self.reformat_add_numeric_value(tmp, 'back_srv_up', row['act'])
+				self.reformat_add_numeric_value(tmp, 'back_srv_max', row['weight'])
 			else:
-				self.reformat_add_numeric_value(tmp, 'front_requests', row['stot'])
-				self.reformat_add_numeric_value(tmp, 'front_err_requests', row['ereq'])
-				self.reformat_add_numeric_value(tmp, 'front_err_connection', row['econ'])
-				self.reformat_add_numeric_value(tmp, 'front_err_rsp', row['eresp'])
+				if (svname not in tmp['servers']):
+					tmp['servers'][svname] = {}
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_bytes_in', row['bin'])
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_bytes_out', row['bout'])
 				
-				self.reformat_add_numeric_value(tmp, 'front_bytes_in', row['bin'])
-				self.reformat_add_numeric_value(tmp, 'front_bytes_out', row['bout'])
-
-				self.reformat_add_numeric_value(tmp, 'front_session_active', row['scur'])
-				self.reformat_add_numeric_value(tmp, 'front_session_queued', row['qcur'])
-
-				self.reformat_add_numeric_value(tmp, 'front_rsp_4xx', row['hrsp_4xx'])
-				self.reformat_add_numeric_value(tmp, 'front_rsp_5xx', row['hrsp_5xx'])
-
-				self.reformat_average_numeric_value(tmp, 'front_cx_time', row['ctime'])
-				self.reformat_average_numeric_value(tmp, 'front_rsp_time', row['rtime'])
-
-				self.reformat_add_numeric_value(tmp, 'front_srv_up', row['act'])
-				self.reformat_add_numeric_value(tmp, 'front_srv_count', 1)
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_sessions', row['stot'])
+				httpreq = my_int(row['hrsp_1xx']) + my_int(row['hrsp_2xx']) + my_int(row['hrsp_3xx']) + my_int(row['hrsp_4xx']) + my_int(row['hrsp_5xx']) + my_int(row['hrsp_other'])
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_requests', httpreq)
 
 			ret[row['# pxname']] = tmp
+			
 		return ret
 
 	def get_component_from_csv(self, csv):
@@ -193,42 +184,40 @@ class Agent:
 			self.components[row['svname']]['duration'] = duration
 
 			## Front
-			self.populateDeltaMetrics(row['svname'], metrics, "Front/Requests", 'Requests', row['front_requests'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Front/Errors/Request", "Errors", row['front_err_requests'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Front/Errors/Connection", "Errors", row['front_err_connection'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Front/Errors/Response", "Errors", row['front_err_rsp'])
+			if ('front_connection' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Connections/Current", 'Requests', row['front_connection'])
+			if ('front_connection_limit' in row):
+				self.populateMetrics(metrics, "Connections/Max", 'Requests', row['front_connection_limit'] * 60)
 
-			self.populateDeltaMetrics(row['svname'], metrics, "Front/Bytes/Received", "Bytes", row['front_bytes_in'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Front/Bytes/Sent", "Bytes", row['front_bytes_out'])
+			self.populateDeltaMetrics(row['svname'], metrics, "SessionRate/Total", 'Sessions', row['back_sessions'])
+			self.populateDeltaMetrics(row['svname'], metrics, "RequestRate/Total", 'Requests', row['back_requests'])
 			
-			self.populateMetrics(metrics, "Front/Sessions/Active", "Sessions", row['front_session_active'])
-			self.populateMetrics(metrics, "Front/Sessions/Queued", "Sessions", row['front_session_queued'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Request", "Errors", row['back_err_requests'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Connection", "Errors", row['back_err_connection'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Response", "Errors", row['back_err_rsp'])
 
-			self.populateDeltaMetrics(row['svname'], metrics, "Front/Responses/4xx", "Responses", row['front_rsp_4xx'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Front/Responses/5xx", "Responses", row['front_rsp_5xx'])
-			self.populateMetrics(metrics, "Front/Responses/ConnectionTime", "MS", row['front_cx_time'])
-			self.populateMetrics(metrics, "Front/Responses/ResponseTime", "MS", row['front_rsp_time'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Received", "Bytes", row['back_bytes_in'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Sent", "Bytes", row['back_bytes_out'])
 			
-			self.populateMetrics(metrics, "Front/Servers/Active", "Servers", row['front_srv_up'])
-			self.populateMetrics(metrics, "Front/Servers/Count", "Servers", row['front_srv_count'])
-			self.populateMetrics(metrics, "Front/Servers/Active_per", "Percentage", row['front_srv_up'] * 100 / row['front_srv_count'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Responses/3xx", "Responses", row['back_rsp_3xx'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Responses/4xx", "Responses", row['back_rsp_4xx'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Responses/5xx", "Responses", row['back_rsp_5xx'])
 
-			## Back
-			self.populateDeltaMetrics(row['svname'], metrics, "Back/Requests", 'Requests', row['back_requests'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Back/Errors/Request", "Errors", row['back_err_requests'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Back/Errors/Connection", "Errors", row['back_err_connection'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Back/Errors/Response", "Errors", row['back_err_rsp'])
-
-			self.populateDeltaMetrics(row['svname'], metrics, "Back/Bytes/Received", "Bytes", row['back_bytes_in'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Back/Bytes/Sent", "Bytes", row['back_bytes_out'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Request/Total", "Requests", row['back_requests'])
 			
-			self.populateMetrics(metrics, "Back/Sessions/Active", "Sessions", row['back_session_active'])
-			self.populateMetrics(metrics, "Back/Sessions/Queued", "Sessions", row['back_session_queued'])
+			self.populateMetrics(metrics, "Responses/ConnectionTime", "MS", row['back_cx_time'])
+			self.populateMetrics(metrics, "Responses/ResponseTime", "MS", row['back_rsp_time'])
+			
+			self.populateMetrics(metrics, "Servers/Active", "Servers", row['back_srv_up'])
+			self.populateMetrics(metrics, "Servers/Count", "Servers", row['back_srv_max'])
 
-			self.populateDeltaMetrics(row['svname'], metrics, "Back/Responses/4xx", "Responses", row['back_rsp_4xx'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Back/Responses/5xx", "Responses", row['back_rsp_5xx'])
-			self.populateMetrics(metrics, "Back/Responses/ConnectionTime", "MS", row['back_cx_time'])
-			self.populateMetrics(metrics, "Back/Responses/ResponseTime", "MS", row['back_rsp_time'])
+			for server in row['servers']:
+				print row['servers'][server]
+				self.populateDeltaMetrics(row['svname'], metrics, "Details/" + server + "/Bytes/Received", "Bytes", row['servers'][server]['back_bytes_in'])
+				self.populateDeltaMetrics(row['svname'], metrics, "Details/" + server + "/Bytes/Sent", "Bytes", row['servers'][server]['back_bytes_out'])
+				self.populateDeltaMetrics(row['svname'], metrics, "SessionRate/" + server, 'Sessions', row['servers'][server]['back_sessions'])
+				self.populateDeltaMetrics(row['svname'], metrics, "RequestRate/" + server, 'Requests', row['servers'][server]['back_requests'])
+				
 
 			self.components[row['svname']]['metrics'] = metrics			
 
@@ -259,6 +248,7 @@ class Agent:
 					self.log(LogsType.ERROR, " 415 request incorrect")
 					run = False
 			except Exception as e:
+				traceback.print_exc(file=sys.stdout)
 				self.log(LogsType.ERROR, str(e))
 				code = "THROWN"
 			print ("Operation get code : " + str(code))
