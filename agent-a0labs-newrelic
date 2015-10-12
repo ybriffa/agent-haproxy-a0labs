@@ -185,9 +185,9 @@ class Agent:
 
 			## Front
 			if ('front_connection' in row):
-				self.populateDeltaMetrics(row['svname'], metrics, "Connections/Current", 'Requests', row['front_connection'])
+				self.populateDeltaMetrics(row['svname'], metrics, "Connections/Current", 'Connection', row['front_connection'])
 			if ('front_connection_limit' in row):
-				self.populateMetrics(metrics, "Connections/Max", 'Requests', row['front_connection_limit'] * 60)
+				self.populateMetrics(metrics, "Connections/Max", 'Connection', row['front_connection_limit'] * 60)
 
 			self.populateDeltaMetrics(row['svname'], metrics, "SessionRate/Total", 'Sessions', row['back_sessions'])
 			self.populateDeltaMetrics(row['svname'], metrics, "RequestRate/Total", 'Requests', row['back_requests'])
@@ -199,9 +199,9 @@ class Agent:
 			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Received", "Bytes", row['back_bytes_in'])
 			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Sent", "Bytes", row['back_bytes_out'])
 			
-			self.populateDeltaMetrics(row['svname'], metrics, "Responses/3xx", "Responses", row['back_rsp_3xx'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Responses/4xx", "Responses", row['back_rsp_4xx'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Responses/5xx", "Responses", row['back_rsp_5xx'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Responses/3xx", "Error", row['back_rsp_3xx'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Responses/4xx", "Error", row['back_rsp_4xx'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Responses/5xx", "Error", row['back_rsp_5xx'])
 
 			self.populateDeltaMetrics(row['svname'], metrics, "Request/Total", "Requests", row['back_requests'])
 			
