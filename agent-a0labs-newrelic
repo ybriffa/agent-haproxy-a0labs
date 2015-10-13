@@ -88,7 +88,6 @@ class Agent:
 
 	def post_datas(self):
 		post_json = json.dumps(self.post_data, indent=4)
-		print post_json
 		headers = {"Content-Type": "application/json",
 					"Accept": "application/json","X-License-Key": self.newrelic_license}
 
@@ -133,6 +132,7 @@ class Agent:
 			if (svname == 'FRONTEND'):
 				self.reformat_add_numeric_value(tmp, 'front_connection', row['stot'])
 				self.reformat_add_numeric_value(tmp, 'front_connection_limit', row['slim'])
+				self.reformat_add_numeric_value(tmp, 'front_connection_rate', row['scur'])
 			elif (svname == 'BACKEND') :
 				self.reformat_add_numeric_value(tmp, 'back_sessions', row['stot'])
 				httpreq = my_int(row['hrsp_1xx']) + my_int(row['hrsp_2xx']) + my_int(row['hrsp_3xx']) + my_int(row['hrsp_4xx']) + my_int(row['hrsp_5xx']) + my_int(row['hrsp_other'])
@@ -161,6 +161,8 @@ class Agent:
 				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_bytes_out', row['bout'])
 				
 				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_sessions', row['stot'])
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'downtime', row['downtime'])
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_connection_rate', row['scur'])
 				httpreq = my_int(row['hrsp_1xx']) + my_int(row['hrsp_2xx']) + my_int(row['hrsp_3xx']) + my_int(row['hrsp_4xx']) + my_int(row['hrsp_5xx']) + my_int(row['hrsp_other'])
 				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_requests', httpreq)
 
@@ -188,8 +190,10 @@ class Agent:
 				self.populateDeltaMetrics(row['svname'], metrics, "Connections/Current", 'Connection', row['front_connection'])
 			if ('front_connection_limit' in row):
 				self.populateMetrics(metrics, "Connections/Max", 'Connection', row['front_connection_limit'] * 60)
+			if ('front_connection_rate' in row):
+				self.populateMetrics(metrics, "SessionRate/Frontend", 'Sessions', row['front_connection_rate'])
 
-			self.populateDeltaMetrics(row['svname'], metrics, "SessionRate/Total", 'Sessions', row['back_sessions'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Session/Total", 'Sessions', row['back_sessions'])
 			self.populateDeltaMetrics(row['svname'], metrics, "RequestRate/Total", 'Requests', row['back_requests'])
 			
 			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Request", "Errors", row['back_err_requests'])
@@ -212,11 +216,13 @@ class Agent:
 			self.populateMetrics(metrics, "Servers/Count", "Servers", row['back_srv_max'])
 
 			for server in row['servers']:
-				print row['servers'][server]
 				self.populateDeltaMetrics(row['svname'], metrics, "Details/" + server + "/Bytes/Received", "Bytes", row['servers'][server]['back_bytes_in'])
 				self.populateDeltaMetrics(row['svname'], metrics, "Details/" + server + "/Bytes/Sent", "Bytes", row['servers'][server]['back_bytes_out'])
-				self.populateDeltaMetrics(row['svname'], metrics, "SessionRate/" + server, 'Sessions', row['servers'][server]['back_sessions'])
+				self.populateDeltaMetrics(row['svname'], metrics, "Session/" + server, 'Sessions', row['servers'][server]['back_sessions'])
+				self.populateMetrics(metrics, "SessionRate/Servers/" + server, 'Sessions', row['servers'][server]['back_connection_rate'])
 				self.populateDeltaMetrics(row['svname'], metrics, "RequestRate/" + server, 'Requests', row['servers'][server]['back_requests'])
+				self.populateDeltaMetrics(row['svname'], metrics, "Downtime/" + server, 'Seconds', row['servers'][server]['downtime'])
+
 				
 
 			self.components[row['svname']]['metrics'] = metrics			
@@ -251,9 +257,7 @@ class Agent:
 				traceback.print_exc(file=sys.stdout)
 				self.log(LogsType.ERROR, str(e))
 				code = "THROWN"
-			print ("Operation get code : " + str(code))
 			if (run):
-				print ("Now waiting for " + str(self.poll_cycle)) + " until next operation done"
 				time.sleep( int(self.poll_cycle))
 				
 	def __init__(self):
