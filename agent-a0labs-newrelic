@@ -87,7 +87,8 @@ class Agent:
 		return cr
 
 	def post_datas(self):
-		post_json = json.dumps(self.post_data, indent=4)
+		post_json = json.dumps(self.post_data, sort_keys=True, indent=4)
+		print post_json
 		headers = {"Content-Type": "application/json",
 					"Accept": "application/json","X-License-Key": self.newrelic_license}
 
@@ -133,6 +134,9 @@ class Agent:
 				self.reformat_add_numeric_value(tmp, 'front_connection', row['stot'])
 				self.reformat_add_numeric_value(tmp, 'front_connection_limit', row['slim'])
 				self.reformat_add_numeric_value(tmp, 'front_connection_rate', row['scur'])
+				httpreq = my_int(row['hrsp_1xx']) + my_int(row['hrsp_2xx']) + my_int(row['hrsp_3xx']) + my_int(row['hrsp_4xx']) + my_int(row['hrsp_5xx']) + my_int(row['hrsp_other'])
+				self.reformat_add_numeric_value(tmp, 'front_requests', httpreq)
+
 			elif (svname == 'BACKEND') :
 				self.reformat_add_numeric_value(tmp, 'back_sessions', row['stot'])
 				httpreq = my_int(row['hrsp_1xx']) + my_int(row['hrsp_2xx']) + my_int(row['hrsp_3xx']) + my_int(row['hrsp_4xx']) + my_int(row['hrsp_5xx']) + my_int(row['hrsp_other'])
@@ -146,8 +150,8 @@ class Agent:
 				self.reformat_add_numeric_value(tmp, 'back_rsp_4xx', row['hrsp_4xx'])
 				self.reformat_add_numeric_value(tmp, 'back_rsp_5xx', row['hrsp_5xx'])
 				
-				self.reformat_add_numeric_value(tmp, 'back_bytes_in', row['bin'])
-				self.reformat_add_numeric_value(tmp, 'back_bytes_out', row['bout'])
+				self.reformat_add_numeric_value(tmp, 'back_bytes_in', my_int(row['bin']) * 8)
+				self.reformat_add_numeric_value(tmp, 'back_bytes_out', my_int(row['bout']) * 8)
 
 				self.reformat_average_numeric_value(tmp, 'back_cx_time', row['ctime'])
 				self.reformat_average_numeric_value(tmp, 'back_rsp_time', row['rtime'])
@@ -157,8 +161,8 @@ class Agent:
 			else:
 				if (svname not in tmp['servers']):
 					tmp['servers'][svname] = {}
-				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_bytes_in', row['bin'])
-				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_bytes_out', row['bout'])
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_bytes_in', my_int(row['bin']) * 8)
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_bytes_out', my_int(row['bout']) * 8)
 				
 				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_sessions', row['stot'])
 				self.reformat_add_numeric_value(tmp['servers'][svname], 'downtime', row['downtime'])
@@ -192,6 +196,8 @@ class Agent:
 				self.populateMetrics(metrics, "Connections/Max", 'Connection', row['front_connection_limit'] * 60)
 			if ('front_connection_rate' in row):
 				self.populateMetrics(metrics, "SessionRate/Frontend", 'Sessions', row['front_connection_rate'])
+			if ('front_requests' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "FrontRequestRate", 'Requests', row['front_requests'])
 
 			self.populateDeltaMetrics(row['svname'], metrics, "Session/Total", 'Sessions', row['back_sessions'])
 			self.populateDeltaMetrics(row['svname'], metrics, "RequestRate/Total", 'Requests', row['back_requests'])
@@ -200,8 +206,8 @@ class Agent:
 			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Connection", "Errors", row['back_err_connection'])
 			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Response", "Errors", row['back_err_rsp'])
 
-			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Received", "Bytes", row['back_bytes_in'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Sent", "Bytes", row['back_bytes_out'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Received", "Bits", row['back_bytes_in'])
+			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Sent", "Bits", row['back_bytes_out'])
 			
 			self.populateDeltaMetrics(row['svname'], metrics, "Responses/3xx", "Error", row['back_rsp_3xx'])
 			self.populateDeltaMetrics(row['svname'], metrics, "Responses/4xx", "Error", row['back_rsp_4xx'])
@@ -216,8 +222,8 @@ class Agent:
 			self.populateMetrics(metrics, "Servers/Count", "Servers", row['back_srv_max'])
 
 			for server in row['servers']:
-				self.populateDeltaMetrics(row['svname'], metrics, "Details/" + server + "/Bytes/Received", "Bytes", row['servers'][server]['back_bytes_in'])
-				self.populateDeltaMetrics(row['svname'], metrics, "Details/" + server + "/Bytes/Sent", "Bytes", row['servers'][server]['back_bytes_out'])
+				self.populateDeltaMetrics(row['svname'], metrics, "Details/" + server + "/Bytes/Received", "Bits", row['servers'][server]['back_bytes_in'])
+				self.populateDeltaMetrics(row['svname'], metrics, "Details/" + server + "/Bytes/Sent", "Bits", row['servers'][server]['back_bytes_out'])
 				self.populateDeltaMetrics(row['svname'], metrics, "Session/" + server, 'Sessions', row['servers'][server]['back_sessions'])
 				self.populateMetrics(metrics, "SessionRate/Servers/" + server, 'Sessions', row['servers'][server]['back_connection_rate'])
 				self.populateDeltaMetrics(row['svname'], metrics, "RequestRate/" + server, 'Requests', row['servers'][server]['back_requests'])
