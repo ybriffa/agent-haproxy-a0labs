@@ -145,6 +145,8 @@ class Agent:
 				self.reformat_add_numeric_value(tmp, 'back_err_requests', row['ereq'])
 				self.reformat_add_numeric_value(tmp, 'back_err_connection', row['econ'])
 				self.reformat_add_numeric_value(tmp, 'back_err_rsp', row['eresp'])
+				errors = my_int(row['ereq']) + my_int(row['econ']) + my_int(row['eresp'])
+				self.reformat_add_numeric_value(tmp, 'back_err_tot', errors)
 
 				self.reformat_add_numeric_value(tmp, 'back_rsp_3xx', row['hrsp_3xx'])
 				self.reformat_add_numeric_value(tmp, 'back_rsp_4xx', row['hrsp_4xx'])
@@ -205,6 +207,7 @@ class Agent:
 			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Request", "Errors", row['back_err_requests'])
 			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Connection", "Errors", row['back_err_connection'])
 			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Response", "Errors", row['back_err_rsp'])
+			self.populateDeltaMetrics(row['svname'], metrics, "TotalErrors", "Errors", row['back_err_tot'])
 
 			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Received", "Bits", row['back_bytes_in'])
 			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Sent", "Bits", row['back_bytes_out'])
