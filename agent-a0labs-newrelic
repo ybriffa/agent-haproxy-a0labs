@@ -73,7 +73,7 @@ class Agent:
 		if (value == None or value == ''):
 			value = 0
 		delta = 0
-		if label in self.old[name]:
+		if label in self.old[name] and value > self.old[name][label]:
 			delta = value - self.old[name][label]
 		self.old[name][label] = value
 		self.populateMetrics(metrics, value_type, scale, delta)
