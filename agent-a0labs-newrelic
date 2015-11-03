@@ -131,44 +131,44 @@ class Agent:
 				tmp = ret[row['# pxname']]
 			svname = row['svname']
 			if (svname == 'FRONTEND'):
-				self.reformat_add_numeric_value(tmp, 'front_connection', row['stot'])
-				self.reformat_add_numeric_value(tmp, 'front_connection_limit', row['slim'])
-				self.reformat_add_numeric_value(tmp, 'front_connection_rate', row['scur'])
+				self.reformat_add_numeric_value(tmp, 'front_connection', my_int(row['stot']))
+				self.reformat_add_numeric_value(tmp, 'front_connection_limit', my_int(row['slim']))
+				self.reformat_add_numeric_value(tmp, 'front_connection_rate', my_int(row['scur']))
 				httpreq = my_int(row['hrsp_1xx']) + my_int(row['hrsp_2xx']) + my_int(row['hrsp_3xx']) + my_int(row['hrsp_4xx']) + my_int(row['hrsp_5xx']) + my_int(row['hrsp_other'])
 				self.reformat_add_numeric_value(tmp, 'front_requests', httpreq)
 
 			elif (svname == 'BACKEND') :
-				self.reformat_add_numeric_value(tmp, 'back_sessions', row['stot'])
+				self.reformat_add_numeric_value(tmp, 'back_sessions', my_int(row['stot']))
 				httpreq = my_int(row['hrsp_1xx']) + my_int(row['hrsp_2xx']) + my_int(row['hrsp_3xx']) + my_int(row['hrsp_4xx']) + my_int(row['hrsp_5xx']) + my_int(row['hrsp_other'])
 				self.reformat_add_numeric_value(tmp, 'back_requests', httpreq)
 				
-				self.reformat_add_numeric_value(tmp, 'back_err_requests', row['ereq'])
-				self.reformat_add_numeric_value(tmp, 'back_err_connection', row['econ'])
-				self.reformat_add_numeric_value(tmp, 'back_err_rsp', row['eresp'])
+				self.reformat_add_numeric_value(tmp, 'back_err_requests', my_int(row['ereq']))
+				self.reformat_add_numeric_value(tmp, 'back_err_connection', my_int(row['econ']))
+				self.reformat_add_numeric_value(tmp, 'back_err_rsp', my_int(row['eresp']))
 				errors = my_int(row['ereq']) + my_int(row['econ']) + my_int(row['eresp'])
 				self.reformat_add_numeric_value(tmp, 'back_err_tot', errors)
 
-				self.reformat_add_numeric_value(tmp, 'back_rsp_3xx', row['hrsp_3xx'])
-				self.reformat_add_numeric_value(tmp, 'back_rsp_4xx', row['hrsp_4xx'])
-				self.reformat_add_numeric_value(tmp, 'back_rsp_5xx', row['hrsp_5xx'])
+				self.reformat_add_numeric_value(tmp, 'back_rsp_3xx', my_int(row['hrsp_3xx']))
+				self.reformat_add_numeric_value(tmp, 'back_rsp_4xx', my_int(row['hrsp_4xx']))
+				self.reformat_add_numeric_value(tmp, 'back_rsp_5xx', my_int(row['hrsp_5xx']))
 				
 				self.reformat_add_numeric_value(tmp, 'back_bytes_in', my_int(row['bin']) * 8)
 				self.reformat_add_numeric_value(tmp, 'back_bytes_out', my_int(row['bout']) * 8)
 
-				self.reformat_average_numeric_value(tmp, 'back_cx_time', row['ctime'])
-				self.reformat_average_numeric_value(tmp, 'back_rsp_time', row['rtime'])
+				self.reformat_average_numeric_value(tmp, 'back_cx_time', my_int(row['ctime']))
+				self.reformat_average_numeric_value(tmp, 'back_rsp_time', my_int(row['rtime']))
 
-				self.reformat_add_numeric_value(tmp, 'back_srv_up', row['act'])
-				self.reformat_add_numeric_value(tmp, 'back_srv_max', row['weight'])
+				self.reformat_add_numeric_value(tmp, 'back_srv_up', my_int(row['act']))
+				self.reformat_add_numeric_value(tmp, 'back_srv_max', my_int(row['weight']))
 			else:
 				if (svname not in tmp['servers']):
 					tmp['servers'][svname] = {}
 				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_bytes_in', my_int(row['bin']) * 8)
 				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_bytes_out', my_int(row['bout']) * 8)
 				
-				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_sessions', row['stot'])
-				self.reformat_add_numeric_value(tmp['servers'][svname], 'downtime', row['downtime'])
-				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_connection_rate', row['scur'])
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_sessions', my_int(row['stot']))
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'downtime', my_int(row['downtime']))
+				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_connection_rate', my_int(row['scur']))
 				httpreq = my_int(row['hrsp_1xx']) + my_int(row['hrsp_2xx']) + my_int(row['hrsp_3xx']) + my_int(row['hrsp_4xx']) + my_int(row['hrsp_5xx']) + my_int(row['hrsp_other'])
 				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_requests', httpreq)
 
@@ -201,28 +201,44 @@ class Agent:
 			if ('front_requests' in row):
 				self.populateDeltaMetrics(row['svname'], metrics, "FrontRequestRate", 'Requests', row['front_requests'])
 
-			self.populateDeltaMetrics(row['svname'], metrics, "Session/Total", 'Sessions', row['back_sessions'])
-			self.populateDeltaMetrics(row['svname'], metrics, "RequestRate/Total", 'Requests', row['back_requests'])
-			
-			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Request", "Errors", row['back_err_requests'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Connection", "Errors", row['back_err_connection'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Errors/Response", "Errors", row['back_err_rsp'])
-			self.populateDeltaMetrics(row['svname'], metrics, "TotalErrors", "Errors", row['back_err_tot'])
+			if ('back_sessions' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Session/Total", 'Sessions', row['back_sessions'])
+			if ('back_requests' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "RequestRate/Total", 'Requests', row['back_requests'])
 
-			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Received", "Bits", row['back_bytes_in'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Sent", "Bits", row['back_bytes_out'])
-			
-			self.populateDeltaMetrics(row['svname'], metrics, "Responses/3xx", "Error", row['back_rsp_3xx'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Responses/4xx", "Error", row['back_rsp_4xx'])
-			self.populateDeltaMetrics(row['svname'], metrics, "Responses/5xx", "Error", row['back_rsp_5xx'])
+			if ('back_err_requests' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Errors/Request", "Errors", row['back_err_requests'])
+			if ('back_err_connection' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Errors/Connection", "Errors", row['back_err_connection'])
+			if ('back_err_rsp' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Errors/Response", "Errors", row['back_err_rsp'])
+			if ('back_err_tot' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "TotalErrors", "Errors", row['back_err_tot'])
 
-			self.populateDeltaMetrics(row['svname'], metrics, "Request/Total", "Requests", row['back_requests'])
+			if ('back_bytes_in' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Received", "Bits", row['back_bytes_in'])
+			if ('back_bytes_out' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Bytes/Sent", "Bits", row['back_bytes_out'])
+
+			if ('back_rsp_3xx' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Responses/3xx", "Error", row['back_rsp_3xx'])
+			if ('back_rsp_4xx' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Responses/4xx", "Error", row['back_rsp_4xx'])
+			if ('back_rsp_5xx' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Responses/5xx", "Error", row['back_rsp_5xx'])
+
+			if ('back_requests' in row):
+				self.populateDeltaMetrics(row['svname'], metrics, "Request/Total", "Requests", row['back_requests'])
 			
-			self.populateMetrics(metrics, "Responses/ConnectionTime", "MS", row['back_cx_time'])
-			self.populateMetrics(metrics, "Responses/ResponseTime", "MS", row['back_rsp_time'])
-			
-			self.populateMetrics(metrics, "Servers/Active", "Servers", row['back_srv_up'])
-			self.populateMetrics(metrics, "Servers/Count", "Servers", row['back_srv_max'])
+			if ('back_cx_time' in row):
+				self.populateMetrics(metrics, "Responses/ConnectionTime", "MS", row['back_cx_time'])
+			if ('back_rsp_time' in row):
+				self.populateMetrics(metrics, "Responses/ResponseTime", "MS", row['back_rsp_time'])
+
+			if ('back_srv_up' in row):
+				self.populateMetrics(metrics, "Servers/Active", "Servers", row['back_srv_up'])
+			if ('back_srv_max' in row):
+				self.populateMetrics(metrics, "Servers/Count", "Servers", row['back_srv_max'])
 
 			for server in row['servers']:
 				self.populateDeltaMetrics(row['svname'], metrics, "Details/" + server + "/Bytes/Received", "Bits", row['servers'][server]['back_bytes_in'])
@@ -231,9 +247,6 @@ class Agent:
 				self.populateMetrics(metrics, "SessionRate/Servers/" + server, 'Sessions', row['servers'][server]['back_connection_rate'])
 				self.populateDeltaMetrics(row['svname'], metrics, "RequestRate/" + server, 'Requests', row['servers'][server]['back_requests'])
 				self.populateDeltaMetrics(row['svname'], metrics, "Downtime/" + server, 'Seconds', row['servers'][server]['downtime'])
-
-				
-
 			self.components[row['svname']]['metrics'] = metrics			
 
 	def run(self):
