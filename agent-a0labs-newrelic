@@ -122,12 +122,13 @@ class Agent:
 	def reformat_csv(self, csv):
 		ret = {}
 		for row in csv:
-			if (row['# pxname'] not in ret):
+			pxname = self.rounddns == True and row['# pxname'] + " - " + socket.getfqdn() or row['# pxname']
+			if (pxname not in ret):
 				tmp = {}
-				tmp['svname'] = row['# pxname']
+				tmp['svname'] = pxname
 				tmp['servers'] = {}
 			else:
-				tmp = ret[row['# pxname']]
+				tmp = ret[pxname]
 			svname = row['svname']
 			if (svname == 'FRONTEND'):
 				self.reformat_add_numeric_value(tmp, 'front_connection', my_int(row['stot']))
@@ -171,7 +172,7 @@ class Agent:
 				httpreq = my_int(row['hrsp_1xx']) + my_int(row['hrsp_2xx']) + my_int(row['hrsp_3xx']) + my_int(row['hrsp_4xx']) + my_int(row['hrsp_5xx']) + my_int(row['hrsp_other'])
 				self.reformat_add_numeric_value(tmp['servers'][svname], 'back_requests', httpreq)
 
-			ret[row['# pxname']] = tmp
+			ret[pxname] = tmp
 			
 		return ret
 
@@ -289,6 +290,8 @@ class Agent:
 		self.newrelic_license = Config().get('NewRelicAPI', 'license_key')
 		self.poll_cycle = Config().getInt('NewRelicAPI', 'poll_cycle')
 
+		# Haproxy round dns - boolean
+		self.rounddns = Config().getBoolean('Haproxy', 'rounddns')
 		# Init of agent informations
 		self.guid = Config().get('Agent', 'guid')
 		self.agent_host = socket.gethostname()
