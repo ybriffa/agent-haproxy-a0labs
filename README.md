@@ -32,7 +32,7 @@ There are a few ways to be sure the plugin remains running as a Daemon or servic
 - put it in your /etc/init.d
 - use upstart
 
-./daemonize has some examples
+./daemonize has some examples, you should read their comments before trying to use the scripts
 
 
 ### Support
