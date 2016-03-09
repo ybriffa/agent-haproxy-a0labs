@@ -17,11 +17,19 @@ Copy the config file into this directory
 
 `sudo cp agent-a0labs.cfg /etc/newrelic/`
 
+The python `requests` library is required:
+
+`pip install requests`
+
+If you chose to use a virtualenv, you may need to modify the example upstart/daemon scripts.
+
+
+
 Fill the informations in the cfg file:
 - License Key
 - URL to access the stat CSV Haproxy's file
 - user and password
-Optionnal:
+Optional:
 - enable/disable logs and specify the directory
 
 ### Daemonize
